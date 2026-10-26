@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Security Design – My Vault: Secret Photo Locker</title>
+  <meta name="description" content="How My Vault encrypts your photos and videos: AES-256-GCM, PBKDF2 pattern keys, per-file HKDF keys, a decoy vault and on-device scanning. The encryption source code is published.">
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <a class="back" href="./">← My Vault</a>
+    <h1>Security Design</h1>
+    <p class="muted">Applies to My Vault 1.0 (build 4) and later. Last updated October 26, 2026.</p>
+
+    <p>Most photo-vault apps ask you to trust them. My Vault publishes the code that protects your files, so you can check that it does what it says. Here is exactly what happens on your iPhone.</p>
+
+    <h2>1. Your pattern becomes a key</h2>
+    <p>When you create a vault, the app generates a random 256-bit <strong>master key</strong> with the system's secure random generator. Your unlock pattern (at least 4 dots on a 4×4 grid) is turned into a 256-bit <strong>wrapping key</strong> with PBKDF2-HMAC-SHA256, using 210,000 iterations and a random 16-byte salt. The wrapping key encrypts the master key with AES-256-GCM. Only the salt and the encrypted master key are stored. Your pattern itself is never saved.</p>
+
+    <h2>2. Every file has its own key</h2>
+    <p>For each photo, video and thumbnail, a separate key is derived from the master key with HKDF-SHA256. Files are encrypted with AES-256-GCM in 1 MB chunks. Each chunk's position and a "last chunk" flag are authenticated, so reordering, truncating or editing a file is detected and it won't open. The list of albums and items is encrypted the same way.</p>
+
+    <h2>3. Locked means locked</h2>
+    <p>The master key exists only in memory while the vault is open. It's discarded the moment the app goes to the background, and temporary decrypted copies (used to play a video or share a photo) are deleted at the same time. The app switcher shows a cover screen instead of your photos. After 5 wrong patterns, the app makes you wait, starting at 30 seconds and doubling with each further miss.</p>
+
+    <h2>4. Face ID is optional</h2>
+    <p>If you turn on Face ID, a copy of the master key is stored in the iOS Keychain with the <code>biometryCurrentSet</code> access control and <code>WhenPasscodeSetThisDeviceOnly</code>. iOS only releases it after a successful Face ID check, it never leaves the device, and it's invalidated automatically if the enrolled faces change.</p>
+
+    <h2>5. Decoy vault</h2>
+    <p>You can set a second pattern that opens a completely separate vault, with its own master key and its own encrypted files. It's meant for situations where someone forces you to unlock the app. Two vaults can never share a pattern. While the decoy is open, settings that would reveal the real vault (Face ID and the decoy controls) are hidden.</p>
+
+    <h2>6. Finding exposed photos</h2>
+    <p>The optional <strong>Find Exposed Photos</strong> scan uses Apple's Vision text recognition on this iPhone to look for bank card numbers (checked with the Luhn algorithm), passport machine-readable lines, ID and license wording, passwords and recovery codes, bank details and Social Security numbers. Images are analyzed in memory and nothing is uploaded. Photos are only moved into the vault after you choose them.</p>
+
+    <h2>7. No servers</h2>
+    <p>My Vault has no account system, no analytics and no third-party SDKs, and it never uploads your files. The only web pages it opens are this website and the published source code, and only when you tap a link to them.</p>
+
+    <h2>What this means</h2>
+    <ul class="features">
+      <li>Nobody can open your vault without your pattern (or your Face ID, if you enabled it). That includes us.</li>
+      <li>If you forget your pattern and Face ID is off, your files can't be recovered. There's no back door.</li>
+      <li>Your encrypted files can be included in your own iPhone backup, but they're only readable with your pattern.</li>
+    </ul>
+
+    <h2>Verify it yourself</h2>
+    <p>The source code that implements all of the above is published at <a href="https://github.com/Jimtarfas/photo-vault-site/tree/main/security">github.com/Jimtarfas/photo-vault-site/security</a>:</p>
+    <ul>
+      <li><a href="https://github.com/Jimtarfas/photo-vault-site/blob/main/security/VaultCrypto.swift">VaultCrypto.swift</a>: key derivation and chunked AES-GCM file encryption</li>
+      <li><a href="https://github.com/Jimtarfas/photo-vault-site/blob/main/security/VaultStorage.swift">VaultStorage.swift</a>: on-disk layout, the encrypted index and the vault spaces</li>
+      <li><a href="https://github.com/Jimtarfas/photo-vault-site/blob/main/security/BiometricKeyStore.swift">BiometricKeyStore.swift</a>: Face ID key storage</li>
+      <li><a href="https://github.com/Jimtarfas/photo-vault-site/blob/main/security/SensitiveScanner.swift">SensitiveScanner.swift</a>: the on-device exposed-photo scan</li>
+    </ul>
+    <p>Found a problem? Email <a href="mailto:nouhe.tarfas@gmail.com?subject=My%20Vault%20security">nouhe.tarfas@gmail.com</a>.</p>
+
+    <p class="links"><a href="support.html">Support</a> · <a href="privacy.html">Privacy Policy</a></p>
+  </main>
+</body>
+</html>
